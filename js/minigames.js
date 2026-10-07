@@ -300,8 +300,11 @@
     if (!t || this.completed[id]) return false;
     this.activeTask = t;
     this.game.state = 'MINIGAME';
-    t.start();
+    // 先给个默认标题（万一小游戏的 start() 没有自己设提示条）
     this.game.ui.setTaskHint(t.icon, t.title);
+    // 再启动小游戏：它会覆盖成更具体的引导文案（例如"小兔子附近有 3 根胡萝卜"）。
+    // 顺序不能反 —— 反了的话小游戏精心写的提示会被这里冲掉。
+    t.start();
     return true;
   };
 
@@ -336,86 +339,158 @@
     this.found = 0;
     this.total = 3;
     this.active = false;
-    this.build();
+    // 注意：不在这里 build()。
+    // 胡萝卜位置依赖"小兔子在哪"和"孩子从哪边走过来"，
+    // 这些在构造时都还不知道，必须等 start() 时再算。
     this.group.visible = false;
   }
 
-  MiniGame1.prototype.build = function () {
+  /**
+   * 生成一根胡萝卜
+   * @param {number} x
+   * @param {number} z
+   * @param {number} index
+   */
+  MiniGame1.prototype.makeCarrot = function (x, z, index) {
     var g = this.game;
-    // 胡萝卜位置：保持在核心活动区内（这是第一个任务，
-    // 孩子刚进游戏，不能让他走太远找不到）。
-    // 但彼此拉开一些距离，需要点小脚走过去。
-    var spots = [
-      { x: -10, z: -8 }, { x: 16, z: -16 }, { x: -22, z: 20 }
-    ];
-    for (var i = 0; i < this.total; i++) {
-      var holder = new THREE.Group();
-      holder.position.set(spots[i].x, 0, spots[i].z);
-      holder.userData = {
-        kind: 'item', mg: 'carrot', index: i,
-        picked: false
-      };
+    var holder = new THREE.Group();
+    holder.position.set(x, 0, z);
+    holder.userData = {
+      kind: 'item', mg: 'carrot', index: index,
+      picked: false
+    };
 
-      // float 组：胡萝卜本体 + 叶子都放这里，统一做漂浮旋转动画
-      var float = new THREE.Group();
-      holder.add(float);
+    // float 组：胡萝卜本体 + 叶子都放这里，统一做漂浮旋转动画
+    var float = new THREE.Group();
+    holder.add(float);
 
-      // 胡萝卜：圆锥倒过来 = 上粗下细的橙锥
-      var body = new THREE.Mesh(
-        new THREE.ConeGeometry(0.42, 1.5, 12),
-        new THREE.MeshLambertMaterial({ color: 0xff9a4d })
-      );
-      body.rotation.x = Math.PI;   // 尖端朝下
-      body.position.y = 0.75;
-      body.castShadow = true;
-      float.add(body);
+    // 胡萝卜：圆锥倒过来 = 上粗下细的橙锥
+    var body = new THREE.Mesh(
+      new THREE.ConeGeometry(0.46, 1.7, 12),
+      new THREE.MeshLambertMaterial({ color: 0xff9a4d })
+    );
+    body.rotation.x = Math.PI;   // 尖端朝下
+    body.position.y = 0.85;
+    body.castShadow = true;
+    float.add(body);
 
-      // 叶子
-      var leafMat = new THREE.MeshLambertMaterial({ color: 0x6fd88a });
-      for (var l = 0; l < 3; l++) {
-        var a = (l / 3) * Math.PI * 2;
-        var leaf = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), leafMat);
-        leaf.position.set(Math.cos(a) * 0.16, 0.8, Math.sin(a) * 0.16);
-        leaf.scale.set(0.7, 1.5, 0.5);
-        leaf.rotation.z = Math.cos(a) * 0.5;
-        leaf.rotation.x = Math.sin(a) * 0.5;
-        float.add(leaf);
-      }
-
-      // 泥土（固定在地面，不跟着飘）
-      var soil = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.5, 0.55, 0.18, 12),
-        new THREE.MeshLambertMaterial({ color: 0xbf9468 })
-      );
-      soil.position.y = 0.09;
-      holder.add(soil);
-
-      // 发光光环（固定在地面）
-      var halo = g.world.makeHalo(0xffd75e);
-      holder.add(halo);
-
-      holder.userData.float = float;
-      holder.userData.halo = halo;
-
-      this.group.add(holder);
-      this.carrots.push(holder);
+    // 叶子
+    var leafMat = new THREE.MeshLambertMaterial({ color: 0x6fd88a });
+    for (var l = 0; l < 3; l++) {
+      var a = (l / 3) * Math.PI * 2;
+      var leaf = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), leafMat);
+      leaf.position.set(Math.cos(a) * 0.18, 0.9, Math.sin(a) * 0.18);
+      leaf.scale.set(0.7, 1.6, 0.5);
+      leaf.rotation.z = Math.cos(a) * 0.5;
+      leaf.rotation.x = Math.sin(a) * 0.5;
+      float.add(leaf);
     }
+
+    // 泥土（固定在地面，不跟着飘）
+    var soil = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.6, 0.2, 12),
+      new THREE.MeshLambertMaterial({ color: 0xbf9468 })
+    );
+    soil.position.y = 0.1;
+    holder.add(soil);
+
+    // 发光光环（固定在地面）——这是孩子最容易看到的指示
+    var halo = g.world.makeHalo(0xffd75e);
+    holder.add(halo);
+
+    // 悬浮在胡萝卜上方的金色箭头：远远就能看见"这里有东西"
+    var arrow = new THREE.Group();
+    var cone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 0.9, 5),
+      new THREE.MeshLambertMaterial({
+        color: 0xffe36b, emissive: 0xaa8800, emissiveIntensity: 0.7
+      })
+    );
+    cone.rotation.x = Math.PI;   // 尖朝下
+    arrow.add(cone);
+    arrow.position.y = 3.1;
+    holder.add(arrow);
+    holder.userData.arrow = arrow;
+
+    holder.userData.float = float;
+    holder.userData.halo = halo;
+
+    this.group.add(holder);
+    this.carrots.push(holder);
+    return holder;
+  };
+
+  MiniGame1.prototype.build = function () {
+    // 旧版本在这里按固定坐标生成 3 根胡萝卜（距离玩家 22~34 单位）。
+    // 实测这是「找不到胡萝卜」的根因：孩子站在原地根本看不到，
+    // 必须逐个走过去才知道有东西 —— 对 4 岁孩子太难了。
+    // 现在改为 start() 时按「小兔子在哪 + 孩子从哪边来」动态生成，
+    // 三根胡萝卜都在小兔子附近 6~11 单位内，抬头就能看见。
+    this.carrots = [];
   };
 
   MiniGame1.prototype.start = function () {
+    var g = this.game;
     this.active = true;
     this.found = 0;
     this.group.visible = true;
-    for (var i = 0; i < this.carrots.length; i++) {
-      this.carrots[i].visible = true;
-      this.carrots[i].userData.picked = false;
-      this.carrots[i].scale.setScalar(1);
+
+    // 先清掉上一轮可能残留的
+    for (var c0 = 0; c0 < this.carrots.length; c0++) {
+      g.scene.remove(this.carrots[c0]);
     }
-    this.game.ui.setTaskHint('🥕', '找一找发光的胡萝卜');
-    this.game.ui.say('⭐', '找一找发光的胡萝卜！', 2600);
-    // 让小星星也指个路
-    var c = this.carrots[0];
-    this.game.star.guideTo(c.position, 2.6);
+    this.carrots = [];
+
+    // ---- 决定胡萝卜摆在哪 ----
+    //
+    // 以**小兔子**为圆心，在它周围 6~11 单位摆 3 根。
+    // 为什么以兔子为圆心而不是玩家：
+    //   孩子是"被小兔子叫过去"的，胡萝卜就该在兔子附近，
+    //   这样"找兔子 → 兔子旁边有胡萝卜"是符合直觉的因果关系。
+    var rabbit = g.npc.find('rabbit');
+    var cx, cz;
+    if (rabbit) {
+      cx = rabbit.root.position.x;
+      cz = rabbit.root.position.z;
+    } else {
+      cx = g.player.pos.x;
+      cz = g.player.pos.z;
+    }
+
+    // 从"玩家 → 兔子"的方向往外散开，保证胡萝卜落在孩子面朝的一侧
+    var toRabbit = Math.atan2(cx - g.player.pos.x, cz - g.player.pos.z);
+    var angles = [0, 0.85, -0.85];
+    var dists = [6.5, 9.5, 11.5];
+    for (var i = 0; i < this.total; i++) {
+      var a = toRabbit + angles[i];
+      var d = dists[i];
+      this.makeCarrot(
+        cx + Math.sin(a) * d,
+        cz + Math.cos(a) * d,
+        i
+      );
+    }
+
+    // ---- 给孩子三个层次的提示 ----
+    // 1) 文字：告诉他要找什么
+    g.ui.setTaskHint('🥕', '小兔子附近有 3 根胡萝卜');
+    g.ui.say('⭐', '看！小兔子旁边有 3 根胡萝卜，去点一点吧', 3400);
+
+    // 2) 小星星飞到第一根胡萝卜上方，引导视线
+    g.star.guideTo(this.carrots[0].position, 4.0);
+
+    // 3) 镜头稍微拉近并看向胡萝卜区，让孩子一眼看到发光的箭头
+    g.focusOn(
+      { x: (cx + this.carrots[0].position.x) / 2, y: 0,
+        z: (cz + this.carrots[0].position.z) / 2 },
+      0.82, 5200
+    );
+
+    // 4) 走到兔子旁边（如果孩子还站得远）
+    var dToRabbit = Math.hypot(g.player.pos.x - cx, g.player.pos.z - cz);
+    if (dToRabbit > 4.5) {
+      g.walkTo(cx + 2.2, cz + 2.2);
+    }
   };
 
   MiniGame1.prototype.update = function (dt) {
@@ -423,11 +498,19 @@
     for (var i = 0; i < this.carrots.length; i++) {
       var c = this.carrots[i];
       if (!c.visible) continue;
+      // 上下漂浮 + 转圈
       c.userData.float.rotation.y = t * 1.6 + i;
-      c.userData.float.position.y = 0.3 + Math.sin(t * 2.4 + i) * 0.16;
+      c.userData.float.position.y = 0.35 + Math.sin(t * 2.4 + i) * 0.18;
+      // 地面光环呼吸
       var h = c.userData.halo;
-      h.scale.setScalar(1 + Math.sin(t * 3 + i) * 0.14);
+      h.scale.setScalar(1 + Math.sin(t * 3 + i) * 0.16);
       h.rotation.z = t * 0.8;
+      // 上方箭头上下跳动（最显眼的指示物）
+      var a = c.userData.arrow;
+      if (a) {
+        a.position.y = 3.0 + Math.sin(t * 2.8 + i * 1.5) * 0.35;
+        a.rotation.y = t * 1.5;
+      }
     }
   };
 
@@ -491,6 +574,13 @@
   MiniGame1.prototype.finish = function () {
     this.active = false;
     this.group.visible = false;
+    // 把胡萝卜从场景里彻底移除并清空引用。
+    // 现在是动态生成的，不清理的话「再玩一次」会越堆越多。
+    for (var i = 0; i < this.carrots.length; i++) {
+      this.game.scene.remove(this.carrots[i]);
+    }
+    this.carrots = [];
+    this.game.focusOff();
   };
 
   /* ===========================================================
@@ -507,78 +597,132 @@
     this.group.visible = false;
   }
 
-  MiniGame2.prototype.build = function () {
-    // 三朵大花：红 / 黄 / 蓝
-    var cfg = [
-      { hex: 0xff5f7e, x: -6, z: 6 },
-      { hex: 0xffd93d, x: 0,  z: 12 },
-      { hex: 0x5bb8ff, x: 6,  z: 6 }
-    ];
-    for (var i = 0; i < 3; i++) {
-      var holder = new THREE.Group();
-      holder.position.set(cfg[i].x, 0, cfg[i].z);
-      holder.userData = { kind: 'item', mg: 'redFlower', index: i, picked: false, colorHex: cfg[i].hex };
+  /**
+   * 生成一朵大花
+   * @param {number} x
+   * @param {number} z
+   * @param {number} hex 花瓣颜色
+   * @param {number} index 序号（0=红 1=黄 2=蓝）
+   */
+  MiniGame2.prototype.makeFlower = function (x, z, hex, index) {
+    var holder = new THREE.Group();
+    holder.position.set(x, 0, z);
+    holder.userData = { kind: 'item', mg: 'redFlower', index: index, picked: false, colorHex: hex };
 
-      var mat = new THREE.MeshLambertMaterial({ color: cfg[i].hex });
-      var stemMat = new THREE.MeshLambertMaterial({ color: 0x6fd88a });
+    var mat = new THREE.MeshLambertMaterial({ color: hex });
+    var stemMat = new THREE.MeshLambertMaterial({ color: 0x6fd88a });
 
-      // 茎
-      var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 2.0, 10), stemMat);
-      stem.position.y = 1.0;
-      stem.castShadow = true;
-      holder.add(stem);
-      // 叶
-      var leaf = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 8), stemMat);
-      leaf.position.set(0.42, 0.75, 0);
-      leaf.scale.set(1, 0.28, 0.5);
-      leaf.rotation.z = -0.5;
-      holder.add(leaf);
+    // 茎
+    var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 2.0, 10), stemMat);
+    stem.position.y = 1.0;
+    stem.castShadow = true;
+    holder.add(stem);
+    // 叶
+    var leaf = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 8), stemMat);
+    leaf.position.set(0.42, 0.75, 0);
+    leaf.scale.set(1, 0.28, 0.5);
+    leaf.rotation.z = -0.5;
+    holder.add(leaf);
 
-      // 花瓣（6 片大大的）
-      var petalGrp = new THREE.Group();
-      petalGrp.position.y = 2.1;
-      for (var p = 0; p < 6; p++) {
-        var pa = (p / 6) * Math.PI * 2;
-        var petal = new THREE.Mesh(new THREE.SphereGeometry(0.52, 12, 10), mat);
-        petal.position.set(Math.cos(pa) * 0.5, 0, Math.sin(pa) * 0.5);
-        petal.scale.set(1, 0.42, 0.75);
-        petal.rotation.y = -pa;
-        petal.castShadow = true;
-        petalGrp.add(petal);
-      }
-      // 花心
-      var core = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10),
-        new THREE.MeshLambertMaterial({ color: 0xfff3a0, emissive: 0xaa8800, emissiveIntensity: 0.4 }));
-      core.scale.set(1, 0.6, 1);
-      petalGrp.add(core);
-      holder.add(petalGrp);
-      holder.userData.petalGrp = petalGrp;
-
-      // 颜色光环（提示这里有花，但不提示颜色）
-      var halo = this.game.world.makeHalo(0xffffff);
-      halo.position.y = 0.1;
-      holder.add(halo);
-      holder.userData.halo = halo;
-
-      this.group.add(holder);
-      this.flowers.push(holder);
+    // 花瓣（6 片大大的）
+    var petalGrp = new THREE.Group();
+    petalGrp.position.y = 2.1;
+    for (var p = 0; p < 6; p++) {
+      var pa = (p / 6) * Math.PI * 2;
+      var petal = new THREE.Mesh(new THREE.SphereGeometry(0.52, 12, 10), mat);
+      petal.position.set(Math.cos(pa) * 0.5, 0, Math.sin(pa) * 0.5);
+      petal.scale.set(1, 0.42, 0.75);
+      petal.rotation.y = -pa;
+      petal.castShadow = true;
+      petalGrp.add(petal);
     }
+    var core = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10),
+      new THREE.MeshLambertMaterial({ color: 0xfff3a0, emissive: 0xaa8800, emissiveIntensity: 0.4 }));
+    core.scale.set(1, 0.6, 1);
+    petalGrp.add(core);
+    holder.add(petalGrp);
+    holder.userData.petalGrp = petalGrp;
+
+    // 白色光环（提示这里有花，但不提示颜色）
+    var halo = this.game.world.makeHalo(0xffffff);
+    halo.position.y = 0.1;
+    holder.add(halo);
+    holder.userData.halo = halo;
+
+    // 上方白色箭头：远远就能看见"这里有三朵花"
+    var arrow = new THREE.Group();
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.85, 5),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xaaaaaa, emissiveIntensity: 0.5 }));
+    cone.rotation.x = Math.PI;
+    arrow.add(cone);
+    arrow.position.y = 3.5;
+    holder.add(arrow);
+    holder.userData.arrow = arrow;
+
+    this.group.add(holder);
+    this.flowers.push(holder);
+    return holder;
+  };
+
+  MiniGame2.prototype.build = function () {
+    // 旧版本在 build() 里按固定坐标生成三朵花（-6,6 / 0,12 / 6,6）。
+    // 花田在地图扩到 82 之后离出生点很远，实测孩子点完小鹿后
+    // 有 2/3 的花在画面外（距离 20~23 单位），根本没法比较颜色。
+    // 现在改为 start() 时以**小鹿**为圆心现场生成，三朵紧凑散开。
+    this.flowers = [];
   };
 
   MiniGame2.prototype.start = function () {
+    var G = this.game;
     this.active = true;
     this.done = false;
     this.group.visible = true;
-    for (var i = 0; i < this.flowers.length; i++) {
-      this.flowers[i].visible = true;
-      this.flowers[i].userData.picked = false;
-      this.flowers[i].scale.setScalar(1);
+
+    // 清掉上一轮
+    for (var c0 = 0; c0 < this.flowers.length; c0++) {
+      G.scene.remove(this.flowers[c0]);
     }
-    this.game.ui.setTaskHint('🌺', '哪一朵是红色的呀？');
-    this.game.ui.say('🦌', '哪一朵是红色的呀？', 2800);
-    this.game.star.guideTo(this.flowers[0].position, 2.6);
-    // 镜头稍微拉近一点，让孩子能清楚分辨三种颜色
-    this.game.focusOn(this.flowers[1].position, 0.8, 5000);
+    this.flowers = [];
+
+    // 以**小鹿**为圆心生成三朵：红 / 黄 / 蓝
+    //
+    // 为什么以小鹿为圆心：孩子是"被小鹿叫过来"的，
+    // 花就该在鹿旁边 —— "找鹿 → 鹿旁边有三朵花"符合直觉。
+    //
+    // 距离 6 / 8 / 10（走 1 秒左右），三朵都进画面，
+    // 这样孩子才能真正"比较三种颜色"，
+    // 而不是站在两朵看不见的花面前猜。
+    var deer = G.npc.find('deer');
+    var cx = deer ? deer.root.position.x : G.player.pos.x;
+    var cz = deer ? deer.root.position.z : G.player.pos.z;
+    var toDeer = Math.atan2(cx - G.player.pos.x, cz - G.player.pos.z);
+
+    var COLORS = [0xff5f7e, 0xffd93d, 0x5bb8ff];
+    var offsets = [0, 0.7, -0.7];
+    var dists = [6, 8.5, 10.5];
+    for (var i = 0; i < 3; i++) {
+      var a = toDeer + offsets[i];
+      this.makeFlower(
+        cx + Math.sin(a) * dists[i],
+        cz + Math.cos(a) * dists[i],
+        COLORS[i], i
+      );
+    }
+
+    G.ui.setTaskHint('🌺', '哪一朵是红色的呀？');
+    G.ui.say('🦌', '看！小鹿旁边有三朵花，哪一朵是红色的呀？', 3600);
+
+    // 小星星飞到黄色花上方（引导视线，但不提示颜色）
+    G.star.guideTo(this.flowers[1].position, 4.0);
+
+    // 镜头对准三朵花的中心，稍微拉近让孩子看清颜色
+    var midX = (this.flowers[0].position.x + this.flowers[2].position.x) / 2;
+    var midZ = (this.flowers[0].position.z + this.flowers[2].position.z) / 2;
+    G.focusOn({ x: midX, y: 0, z: midZ }, 0.78, 6000);
+
+    // 孩子还站得远就先走到鹿旁边
+    var d2 = Math.hypot(G.player.pos.x - cx, G.player.pos.z - cz);
+    if (d2 > 4.5) G.walkTo(cx + 2.4, cz + 2.4);
   };
 
   MiniGame2.prototype.update = function (dt) {
@@ -589,6 +733,12 @@
       f.userData.petalGrp.rotation.y = t * 0.8 + i;
       f.userData.petalGrp.position.y = 2.1 + Math.sin(t * 1.8 + i) * 0.09;
       f.userData.halo.scale.setScalar(1 + Math.sin(t * 3 + i) * 0.12);
+      // 上方箭头跳动
+      var a = f.userData.arrow;
+      if (a) {
+        a.position.y = 3.4 + Math.sin(t * 2.7 + i * 1.6) * 0.3;
+        a.rotation.y = t * 1.3;
+      }
     }
   };
 
@@ -646,6 +796,11 @@
     this.active = false;
     this.group.visible = false;
     this.game.focusOff();
+    // 花是动态生成的，彻底移除并清空引用（否则"再玩一次"会累积）
+    for (var i = 0; i < this.flowers.length; i++) {
+      this.game.scene.remove(this.flowers[i]);
+    }
+    this.flowers = [];
   };
 
   /* ===========================================================
@@ -1092,50 +1247,92 @@
       { hex: 0x63d68a, name: '绿色' },
       { hex: 0x5bb8ff, name: '蓝色' }
     ];
-    // 五颗宝石散布在中心区和中环。
-    // 刻意让后两颗离中心远一些：地图扩大后，
-    // 孩子需要真的"走出去探索"才能集齐，扩大的场地才有意义。
-    var spots = [
-      { x: 14, z: 14 },                 // 中心区（近）
-      { x: -16, z: -12 },               // 中心区（近）
-      { x: 34, z: -26 },                // 中环
-      { x: -40, z: 30 },                // 中环
-      { x: 46, z: 38 }                  // 中环边缘
-    ];
 
-    for (var i = 0; i < 5; i++) {
+    // 宝石位置**不写死**，改成 start() 时以玩家为圆心现场生成。
+    //
+    // 原因：地图从 46 扩到 82 之后，原来的固定坐标（最远 52 单位）
+    // 会让孩子走 7 秒才能看到下一个 —— 实测这是"找不到"同类问题。
+    // 而且孩子玩到这一步时站的位置不可预测，写死坐标必然出问题。
+    this.spots = [];
+  };
+
+  /**
+   * 围绕玩家生成 5 颗宝石
+   * @param {THREE.Vector3} center 圆心（通常是玩家位置）
+   */
+  MiniGame5.prototype.spawnGems = function (center) {
+    var colors = [
+      0xff5f7e, 0xffa14f, 0xffd93d, 0x63d68a, 0x5bb8ff
+    ];
+    // 清掉上一轮的
+    for (var i = 0; i < this.gems.length; i++) {
+      this.game.scene.remove(this.gems[i]);
+    }
+    this.gems = [];
+    this.spots = [];
+
+    // 在玩家周围摆一圈，5 个方向各一个，距离 7~12（走 1 秒左右）。
+    // 全部要落进画面：孩子得能同时看到"还有几颗没找"，
+    // 散太开就会有一半在屏幕外，他根本不知道自己漏了哪几颗。
+    var base = Math.random() * Math.PI * 2;
+    for (var k = 0; k < 5; k++) {
+      var a = base + (k / 5) * Math.PI * 2;
+      var d = 7 + (k % 3) * 2.5;
+      this.spots.push({
+        x: center.x + Math.sin(a) * d,
+        z: center.z + Math.cos(a) * d
+      });
+    }
+
+    for (var m = 0; m < 5; m++) {
       var holder = new THREE.Group();
-      holder.position.set(spots[i].x, 0, spots[i].z);
-      holder.userData = { kind: 'item', mg: 'rainbowGem', index: i, picked: false, hex: colors[i].hex };
+      holder.position.set(this.spots[m].x, 0, this.spots[m].z);
+      holder.userData = {
+        kind: 'item', mg: 'rainbowGem', index: m, picked: false, hex: colors[m]
+      };
 
       // 宝石：八面体
       var gemMat = new THREE.MeshLambertMaterial({
-        color: colors[i].hex, emissive: colors[i].hex, emissiveIntensity: 0.4
+        color: colors[m], emissive: colors[m], emissiveIntensity: 0.45
       });
-      var gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.62, 0), gemMat);
-      gem.position.y = 1.5;
+      var gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.7, 0), gemMat);
+      gem.position.y = 1.6;
       gem.castShadow = true;
       holder.add(gem);
       holder.userData.gem = gem;
 
       // 底座：小台子
-      var base = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.7, 0.85, 0.3, 12),
+      var base2 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.75, 0.9, 0.32, 12),
         new THREE.MeshLambertMaterial({ color: 0xfff3dc })
       );
-      base.position.y = 0.15;
-      holder.add(base);
+      base2.position.y = 0.16;
+      holder.add(base2);
 
       // 发光光环
-      var halo = this.game.world.makeHalo(colors[i].hex);
+      var halo = this.game.world.makeHalo(colors[m]);
       holder.add(halo);
       holder.userData.halo = halo;
 
-      // 光柱（收集后点亮，竖起来）
-      var pillar = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.28, 0.4, 6, 12, 1, true),
+      // 上方金色箭头（和胡萝卜一致，远近都能看见）
+      var arrow = new THREE.Group();
+      var cone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.44, 0.95, 5),
         new THREE.MeshLambertMaterial({
-          color: colors[i].hex, emissive: colors[i].hex, emissiveIntensity: 0.7,
+          color: 0xffe36b, emissive: 0xaa8800, emissiveIntensity: 0.7
+        })
+      );
+      cone.rotation.x = Math.PI;
+      arrow.add(cone);
+      arrow.position.y = 3.3;
+      holder.add(arrow);
+      holder.userData.arrow = arrow;
+
+      // 光柱（收集后点亮）
+      var pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.42, 6, 12, 1, true),
+        new THREE.MeshLambertMaterial({
+          color: colors[m], emissive: colors[m], emissiveIntensity: 0.7,
           transparent: true, opacity: 0, side: THREE.DoubleSide
         })
       );
@@ -1146,7 +1343,6 @@
 
       this.group.add(holder);
       this.gems.push(holder);
-      this.lightPillars.push(colors[i].hex);
     }
   };
 
@@ -1156,19 +1352,24 @@
     this.found = 0;
     this.group.visible = true;
 
-    for (var i = 0; i < this.gems.length; i++) {
-      var g = this.gems[i];
-      g.visible = true;
-      g.userData.picked = false;
-      g.scale.setScalar(1);
-      g.position.y = 0;
-      g.userData.pillar.visible = false;
-      g.userData.pillar.material.opacity = 0;
-    }
+    // 以玩家为圆心现场生成 5 颗宝石（见 spawnGems 注释）
+    this.spawnGems(G.player.pos);
 
-    G.ui.setTaskHint('💎', '找找发光的彩色宝石');
-    G.ui.say('🦄', '花园里藏着五颗彩虹宝石，你能把它们都找到吗？', 3200);
-    G.star.guideTo(this.gems[0].position, 2.8);
+    G.ui.setTaskHint('💎', '周围有 5 颗彩色宝石');
+    G.ui.say('🦄', '看！周围有 5 颗彩色宝石，都去点一点吧', 3600);
+
+    // 小星星飞到最近的一颗上方
+    var nearest = this.gems[0];
+    var nd = Infinity;
+    for (var i = 0; i < this.gems.length; i++) {
+      var d = Math.hypot(this.gems[i].position.x - G.player.pos.x,
+                         this.gems[i].position.z - G.player.pos.z);
+      if (d < nd) { nd = d; nearest = this.gems[i]; }
+    }
+    G.star.guideTo(nearest.position, 4.0);
+
+    // 镜头拉高，5 颗尽量都进画面
+    G.focusOn({ x: G.player.pos.x, y: 0, z: G.player.pos.z }, 1.08, 5000);
   };
 
   MiniGame5.prototype.update = function (dt) {
@@ -1179,11 +1380,16 @@
       if (!g.userData.picked) {
         g.userData.gem.rotation.y = t * 1.6;
         g.userData.gem.rotation.x = Math.sin(t * 1.1 + i) * 0.25;
-        g.userData.gem.position.y = 1.5 + Math.sin(t * 2.6 + i) * 0.2;
+        g.userData.gem.position.y = 1.6 + Math.sin(t * 2.6 + i) * 0.2;
         g.userData.halo.scale.setScalar(1 + Math.sin(t * 3.4 + i) * 0.16);
         g.userData.halo.rotation.z = t * 0.6;
+        // 上方箭头跳动（最显眼的指示）
+        var a = g.userData.arrow;
+        if (a) {
+          a.position.y = 3.2 + Math.sin(t * 2.8 + i * 1.4) * 0.35;
+          a.rotation.y = t * 1.5;
+        }
       } else if (g.userData.pillar.visible) {
-        // 光柱呼吸
         g.userData.pillar.material.opacity = 0.24 + Math.sin(t * 2.2 + i) * 0.1;
         g.userData.pillar.rotation.y = t * 0.5;
       }
@@ -1272,6 +1478,12 @@
     this.active = false;
     this.group.visible = false;
     this.game.focusOff();
+    // 宝石是动态生成的，彻底移除并清空引用，
+    // 否则「再玩一次」会不断累积新对象。
+    for (var i = 0; i < this.gems.length; i++) {
+      this.game.scene.remove(this.gems[i]);
+    }
+    this.gems = [];
   };
 
   /* ===========================================================

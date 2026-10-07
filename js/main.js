@@ -374,25 +374,23 @@
       if (this.chest) this.pickables.push(this.chest.group);
       // 房子
       if (this.garden && this.garden.houseGroup) this.pickables.push(this.garden.houseGroup);
-      // 小游戏里的可收集物
-      var mgs = [this.mg1, this.mg2, this.mg5];
-      for (i = 0; i < mgs.length; i++) {
-        if (mgs[i] && mgs[i].group) {
-          var arr = mgs[i].carrots || mgs[i].flowers || mgs[i].gems;
-          if (arr) for (var j = 0; j < arr.length; j++) this.pickables.push(arr[j]);
-        }
-      }
-      // 重要：给每个可收集物的所有子 mesh 打上 mgRoot 标记，
-      // 这样射线命中任何一层都能追溯到它所属的容器。
-      // 注意：NPC、房子、宝箱有自己的标记，不能被覆盖成 mgRoot。
+      // 小游戏里的可收集物。
+      // 注意：mg1 的胡萝卜是任务开始时动态生成的，
+      // 这里必须过滤掉「已不可见 / 已拾取」的，否则点不到新生成的。
       var mgRoots = [];
       var mgs = [this.mg1, this.mg2, this.mg5];
       for (i = 0; i < mgs.length; i++) {
-        if (mgs[i] && mgs[i].group) {
-          var arr = mgs[i].carrots || mgs[i].flowers || mgs[i].gems;
-          if (arr) for (var j = 0; j < arr.length; j++) mgRoots.push(arr[j]);
+        if (!mgs[i] || !mgs[i].group || !mgs[i].group.visible) continue;
+        var arr = mgs[i].carrots || mgs[i].flowers || mgs[i].gems;
+        if (!arr) continue;
+        for (var j = 0; j < arr.length; j++) {
+          if (arr[j].visible && !arr[j].userData.picked) mgRoots.push(arr[j]);
         }
       }
+      for (i = 0; i < mgRoots.length; i++) this.pickables.push(mgRoots[i]);
+      // 重要：给每个可收集物的所有子 mesh 打上 mgRoot 标记，
+      // 这样射线命中任何一层都能追溯到它所属的容器。
+      // 注意：NPC、房子、宝箱有自己的标记，不能被覆盖成 mgRoot。
       mgRoots.forEach(function (root) {
         root.traverse(function (o) {
           if (o.isMesh) {
@@ -401,7 +399,6 @@
           }
         });
       });
-      this.pickables = this.pickables.concat(mgRoots);
 
       // NPC 的子 mesh 标记 npcRoot（npc.js 里已做，这里做双保险）
       if (this.npc) {
@@ -621,6 +618,9 @@
       var ok = this.tasks.begin(taskId);
       if (ok) {
         var t = this.tasks.activeTask;
+        // 小游戏可能动态生成可收集物（如胡萝卜按小兔子位置现场生成），
+        // 所以每次开任务都要重建可点击列表，否则新生成的胡萝卜点不到。
+        this.buildPickables();
         this.ui.say('⭐', t.intro, 3400);
         this.player.zoomIn();
         var self = this;
@@ -634,6 +634,11 @@
     onTaskComplete: function (task) {
       var self = this;
       this.state = 'PLAYING';
+
+      // 清理本次任务动态生成的可收集物。
+      // 必须在状态切回 PLAYING 之前做：finish() 里的数组可能和场景实际对象
+      // 不同步（任务被提前结束等），靠 userData 标记兜底扫一遍最稳。
+      this.purgeMinigameObjects();
 
       // 加星
       var stars = global.DDSave.addStar();
@@ -742,6 +747,59 @@
     },
 
     /**
+     * 清理场景里所有小游戏动态生成的可收集物
+     *
+     * 这些对象（胡萝卜 / 花 / 宝石）是在任务开始时按当时的场景位置现场生成的，
+     * 不像静态景物那样一开始就固定存在。如果只依赖各游戏的 finish() 去清，
+     * 一旦数组和场景不同步就会漏掉，表现为"再玩一次"后
+     * 场景里攒了 6 根胡萝卜、10 颗宝石，显存和 draw calls 持续上涨。
+     *
+     * 所以这里按 userData.mg 标记兜底扫一遍整个场景。
+     */
+    purgeMinigameObjects: function () {
+      var mgTags = ['carrot', 'redFlower', 'rainbowGem', 'duck'];
+      // 先把要删的对象收集到一个列表里，再统一移除。
+      //
+      // 关键：不能在 traverse 回调里直接改 this.mg1.carrots 这类数组。
+      // 那些对象本身就是数组的元素，遍历中移除会让数组边变边读，
+      // 触发 "Cannot read properties of undefined (reading 'traverse')"，
+      // 而且会漏删一半对象。
+      var doomed = [];
+      this.scene.traverse(function (o) {
+        if (o.userData && mgTags.indexOf(o.userData.mg) >= 0) {
+          doomed.push(o);
+        }
+      });
+      var removed = 0;
+      for (var i = 0; i < doomed.length; i++) {
+        if (!doomed[i].parent) continue;
+        // 必须显式 dispose：从场景树里 remove 只断开引用，
+        // 不会释放 GPU 侧的 geometry/texture。
+        // 不 dispose 的话 renderer.info.memory.geometries 会一轮一轮往上涨
+        //（实测 290 → 429 → 508），长时间玩必然显存吃紧、掉帧。
+        doomed[i].traverse(function (c) {
+          if (c.geometry && c.geometry.dispose) c.geometry.dispose();
+          if (c.material) {
+            if (Array.isArray(c.material)) {
+              c.material.forEach(function (m) { if (m.dispose) m.dispose(); });
+            } else if (c.material.dispose) {
+              c.material.dispose();
+            }
+          }
+        });
+        doomed[i].parent.remove(doomed[i]);
+        removed++;
+      }
+      // 现在可以安全清空引用了
+      if (this.mg1) { this.mg1.carrots = []; this.mg1.found = 0; }
+      if (this.mg2) { this.mg2.flowers = []; this.mg2.done = false; }
+      if (this.mg5) { this.mg5.gems = []; this.mg5.found = 0; }
+      if (removed > 0) {
+        console.log('[清理] 移除小游戏对象 ' + removed + ' 个');
+      }
+    },
+
+    /**
      * 重新开始（保留奖励，清空任务）
      */
     restart: function (keepRewards) {
@@ -761,6 +819,14 @@
       // 重置小游戏
       this.mg1.finish(); this.mg2.finish(); this.mg3.finish();
       this.mg4.finish(); this.mg5.finish();
+      // 动态生成的可收集物要额外做一次"深度清理"。
+      // 为什么 finish() 里已经清理了还要再来一遍：
+      // finish() 依赖 this.carrots / this.flowers / this.gems 数组，
+      // 而这些数组在某些路径（比如任务被 done() 提前结束、或者中途切状态）
+      // 可能和场景里的实际对象不同步，导致漏掉一部分。
+      // purgeAll() 是兜底：直接按 userData.mg 标记遍历整个场景清一遍，
+      // 保证「再玩一次」后场景对象数不会一轮一轮往上涨。
+      this.purgeMinigameObjects();
       this.mg1.found = 0;
       this.mg5.found = 0;
       this.mg2.done = false;

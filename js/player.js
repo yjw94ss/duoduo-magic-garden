@@ -687,7 +687,11 @@
    * @param {number} dur 持续毫秒
    */
   Player.prototype.focusOn = function (pos, zoom, dur) {
-    this.focusTarget = pos.clone();
+    // 允许传普通对象（游戏里多处传的是 {x, y, z}），
+    // 统一转成 Vector3，否则 pos.clone is not a function。
+    this.focusTarget = (pos && typeof pos.clone === 'function')
+      ? pos.clone()
+      : new THREE.Vector3(pos ? pos.x : 0, pos ? pos.y : 0, pos ? pos.z : 0);
     this.zoomTarget = zoom || 0.7;
     clearTimeout(this._focusTimer);
     var self = this;
