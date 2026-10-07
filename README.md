@@ -2,9 +2,15 @@
 
 一款为 **4 岁小朋友**量身定做的中文 3D 网页游戏。HTML5 + JavaScript + Three.js，纯前端，无需后端、无需联网、无需安装任何东西。
 
+## 🎮 在线试玩
+
+**https://yjw94ss.github.io/duoduo-magic-garden/**
+
+手机上直接用浏览器打开就能玩。
+
 ## 📱 手机上怎么玩
 
-**用手机浏览器打开上面的网址就行**（需要联网，网址是 GitHub Pages 提供的 HTTPS 链接）。
+**用手机浏览器打开上面的网址就行**。
 
 - **iPhone / iPad**：Safari 打开 → 点「开始游戏」
 - **安卓手机**：Chrome 打开 → 点「开始游戏」
