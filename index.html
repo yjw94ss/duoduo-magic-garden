@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffe9f3">
+<title>朵朵的魔法花园</title>
+<!-- 内联 favicon：避免额外请求，也避免 404 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8C%B8%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ======================= 3D 场景容器 ======================= -->
+<div id="scene-wrap">
+  <canvas id="game-canvas"></canvas>
+</div>
+
+<!-- ======================= 常驻 HUD ======================= -->
+<div id="hud" class="hidden">
+  <!-- 右上角：星星计数 -->
+  <div id="star-counter">
+    <span class="star-icon">⭐</span>
+    <span id="star-text">0/5</span>
+  </div>
+
+  <!-- 右上角：声音开关（明显） -->
+  <button id="btn-sound" class="hud-btn" aria-label="声音开关">
+    <span id="sound-icon">🔊</span>
+  </button>
+
+  <!-- 右上角：家长模式齿轮（很不显眼，需长按） -->
+  <button id="btn-gear" class="gear-btn" aria-label="设置">
+    <svg viewBox="0 0 24 24" width="20" height="20">
+      <path fill="currentColor" d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.24-1.12.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.38 1.05.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5z"/>
+    </svg>
+    <span id="gear-progress"></span>
+  </button>
+</div>
+
+<!-- ======================= 对话气泡（小星星 / NPC 说话） ======================= -->
+<div id="bubble" class="hidden">
+  <div id="bubble-avatar">⭐</div>
+  <div id="bubble-text"></div>
+</div>
+
+<!-- ======================= 巨大选择按钮区（屏幕下半部分） ======================= -->
+<div id="choices" class="hidden"></div>
+
+<!-- ======================= 任务提示条 ======================= -->
+<div id="task-hint" class="hidden">
+  <span id="task-hint-icon">🐰</span>
+  <span id="task-hint-text">小兔子在等你呀</span>
+</div>
+
+<!-- ======================= 页面 1：LOGO ======================= -->
+<div id="screen-logo" class="screen">
+  <div class="logo-wrap">
+    <div class="logo-flower">🌸</div>
+    <h1 class="logo-title">朵朵的<br>魔法花园</h1>
+    <div class="logo-sub">DuoDuo's Magic Garden</div>
+    <div class="logo-rainbow"></div>
+  </div>
+  <button id="btn-start" class="giant-btn btn-rainbow">
+    <span class="btn-icon">🌈</span>
+    <span class="btn-label">开始游戏</span>
+  </button>
+  <div class="logo-tip">轻轻点一下屏幕，小朵朵就会走过去</div>
+</div>
+
+<!-- ======================= 页面 2：角色选择 ======================= -->
+<div id="screen-select" class="screen hidden">
+  <h2 class="screen-title">你想当哪个小公主？</h2>
+  <div id="char-grid">
+    <button class="char-card" data-char="princess">
+      <span class="char-emoji">👑</span>
+      <span class="char-name">彩虹公主</span>
+      <span class="char-tag">甜甜的粉裙子</span>
+    </button>
+    <button class="char-card" data-char="cat">
+      <span class="char-emoji">🐱</span>
+      <span class="char-name">小猫魔法师</span>
+      <span class="char-tag">会变大 magick</span>
+    </button>
+    <button class="char-card" data-char="fairy">
+      <span class="char-emoji">🧚</span>
+      <span class="char-name">星星小精灵</span>
+      <span class="char-tag">亮亮的小翅膀</span>
+    </button>
+    <button class="char-card" data-char="unicorn">
+      <span class="char-emoji">🦄</span>
+      <span class="char-name">独角兽骑士</span>
+      <span class="char-tag">勇敢的小骑士</span>
+    </button>
+  </div>
+</div>
+
+<!-- ======================= 页面 3：结算 ======================= -->
+<div id="screen-finish" class="screen hidden">
+  <div class="finish-card">
+    <div class="finish-emoji">🎉</div>
+    <h2 class="finish-title">今天的魔法冒险完成啦！</h2>
+    <div class="finish-reward" id="finish-reward-box"></div>
+    <button id="btn-replay" class="giant-btn btn-pink">
+      <span class="btn-icon">🔄</span><span class="btn-label">再玩一次</span>
+    </button>
+    <button id="btn-freeplay" class="giant-btn btn-mint">
+      <span class="btn-icon">🌷</span><span class="btn-label">去花园玩</span>
+    </button>
+  </div>
+</div>
+
+<!-- ======================= 宝箱奖励弹层 ======================= -->
+<div id="reward-modal" class="modal hidden">
+  <div class="reward-card">
+    <div class="reward-glow"></div>
+    <div class="reward-emoji" id="reward-emoji">👑</div>
+    <div class="reward-name" id="reward-name">粉色皇冠</div>
+    <div class="reward-desc" id="reward-desc">戴在小朵朵头上最好看啦！</div>
+    <button id="btn-reward-ok" class="giant-btn btn-rainbow small">
+      <span class="btn-icon">💖</span><span class="btn-label">收下啦</span>
+    </button>
+  </div>
+</div>
+
+<!-- ======================= 家长模式 ======================= -->
+<div id="parent-modal" class="modal hidden">
+  <div class="parent-card">
+    <h3 class="parent-title">👨‍👩‍👧 家长中心</h3>
+    <div class="parent-grid">
+      <div class="parent-item">
+        <div class="parent-num" id="p-time">0</div>
+        <div class="parent-label">今日游戏时长（分钟）</div>
+      </div>
+      <div class="parent-item">
+        <div class="parent-num" id="p-tasks">0</div>
+        <div class="parent-label">已完成小游戏</div>
+      </div>
+      <div class="parent-item">
+        <div class="parent-num" id="p-color">未完成</div>
+        <div class="parent-label">颜色认知</div>
+      </div>
+      <div class="parent-item">
+        <div class="parent-num" id="p-number">未完成</div>
+        <div class="parent-label">数字认知</div>
+      </div>
+    </div>
+    <div class="parent-tips">
+      本游戏不收集任何儿童姓名、照片、地址、电话等个人信息，<br>
+      所有记录仅保存在本机浏览器中。
+    </div>
+    <div class="parent-actions">
+      <button id="btn-parent-reset" class="mini-btn">清空本机记录</button>
+      <button id="btn-parent-close" class="mini-btn primary">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= 加载层 ======================= -->
+<div id="loading">
+  <div class="loading-flower">🌷</div>
+  <div class="loading-text">魔法花园正在开花…</div>
+</div>
+
+<!-- ======================= 错误提示（仅开发期可见） ======================= -->
+<div id="error-box" class="hidden"></div>
+
+<!-- ======================= 脚本 ======================= -->
+<script src="vendor/three.min.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/world.js"></script>
+<script src="js/player.js"></script>
+<script src="js/npc.js"></script>
+<script src="js/minigames.js"></script>
+<script src="js/rewards.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
